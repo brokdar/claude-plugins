@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-# PreToolUse hook: block reading secrets out of a .env file via any vector.
+# PreToolUse hook: block reading secrets out of the .env file via any vector.
 #
 # Reads the hook JSON on stdin, inspects tool_name + tool_input, and prints
 # {"decision": "block", "reason": "..."} (exit 0) the moment it sees an attempt
-# to read a real .env file. Template files (.env.example/.sample/.template/.dist)
-# are allowed through.
+# to read the literal `.env` file. Every `.env.<suffix>` variant
+# (.env.local, .env.production, .env.test, .env.example, ...) is allowed
+# through — only the bare `.env` basename is treated as a secrets file.
 #
 # Covered vectors:
 #   - Read / Edit / Write / MultiEdit / NotebookEdit  -> tool_input.file_path
@@ -17,35 +18,25 @@ import os
 import re
 import sys
 
-# Basenames that are conventionally placeholder templates, not real secrets.
-TEMPLATE_BASENAMES = {
-    ".env.example",
-    ".env.sample",
-    ".env.template",
-    ".env.dist",
-}
-
-# Matches a real dotenv reference inside a shell command, but not templates and
-# not unrelated words like ".environment". Case-insensitive for .ENV etc.
+# Matches a bare `.env` reference inside a shell command, but not `.env.<suffix>`
+# variants (.env.local, .env.test, ...) and not unrelated words like
+# ".environment". Case-insensitive for .ENV etc.
 BASH_ENV_RE = re.compile(
-    r"\.env\b(?!\.(?:example|sample|template|dist)\b)",
+    r"\.env\b(?![.\-])",
     re.IGNORECASE,
 )
 
 
 def is_env_secret_path(path: str) -> bool:
-    """True if `path` points at a real .env secrets file (not a template)."""
+    """True if `path` points at the literal `.env` secrets file.
+
+    Only the bare `.env` basename counts; every `.env.<suffix>` variant
+    (.env.local, .env.production, .env.test, .env.example, ...) is allowed.
+    """
     if not path:
         return False
     base = os.path.basename(str(path).replace("\\", "/")).lower()
-    if base in TEMPLATE_BASENAMES:
-        return False
-    return (
-        base == ".env"
-        or base.startswith(".env.")
-        or base.startswith(".env-")
-        or base.endswith(".env")
-    )
+    return base == ".env"
 
 
 def block(reason: str) -> None:
@@ -67,7 +58,8 @@ def main() -> None:
 
     advice = (
         " Reading it would expose environment variables / secrets to the model. "
-        "Ask the user for the value directly, or read a .env.example template instead."
+        "Ask the user for the value directly, or read a .env.example template "
+        "(or another .env.<suffix> variant) instead."
     )
 
     # Path-based tools: Read, Edit, Write, MultiEdit, NotebookEdit, Grep.

@@ -13,6 +13,14 @@
           { "type": "command", "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py\"; done; echo 'base plugin: no python interpreter (python3/python/py) on PATH; env-read guard inactive' >&2" }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Edit|MultiEdit|NotebookEdit|Grep|Bash",
+        "hooks": [
+          { "type": "command", "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/redact-env-secrets.py\"; done; echo 'base plugin: no python interpreter (python3/python/py) on PATH; env-secret redaction inactive' >&2" }
+        ]
+      }
     ]
   }
 }

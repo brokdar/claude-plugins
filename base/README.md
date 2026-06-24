@@ -17,7 +17,8 @@ destructive-git + secrets-read safety net.
 | Agent | `test-strategist` | Designs the test strategy with a built-in testing ethic — each test must assert the *specific* claim and fail for the right reason, not pass on a proxy. |
 | Workflow | `implement-plan` | The orchestration script behind `/base:implement-plan`. Stack-neutral; reads each phase's gates and build steps from the plan. |
 | Hook | `block-destructive-git` (PreToolUse) | Blocks destructive git commands run via Bash. |
-| Hook | `block-env-read` (PreToolUse) | Blocks reading a real `.env` secrets file through any tool (Read/Edit/Write/Grep/Bash), while allowing `.env.example`-style templates. |
+| Hook | `block-env-read` (PreToolUse) | Blocks reading the literal `.env` secrets file through any tool (Read/Edit/Write/Grep/Bash), while allowing every `.env.<suffix>` variant. |
+| Hook | `redact-env-secrets` (PostToolUse) | When a `.env.<suffix>` variant is read (Read/Grep/Bash), redacts the *value* of any assignment whose name looks secret (TOKEN/PASSWORD/KEY/SECRET, …) before the model sees it. Best-effort safety net. |
 
 ### Skill: `/base:feature-specify`
 
@@ -155,8 +156,8 @@ When blocked, Claude is told to use the safe alternative or ask you to confirm.
 
 ### Hook: block-env-read
 
-A `PreToolUse` hook on `Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Bash` that blocks access to a
-real `.env` secrets file before it happens, across every vector:
+A `PreToolUse` hook on `Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Bash` that blocks access to the
+literal `.env` secrets file before it happens, across every vector:
 
 - File tools (`Read`/`Edit`/`Write`/`MultiEdit`/`NotebookEdit`) targeting a `.env` path — this
   covers both **reading** secrets and **writing/overwriting** a real `.env` (Edit/Write are blocked
@@ -164,13 +165,45 @@ real `.env` secrets file before it happens, across every vector:
 - `Grep` via its `path` or `glob`
 - `Bash` commands that reference a `.env` file (`cat`, `grep`, `source`, redirects, `vim`, etc.)
 
-Template files (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`) are allowed through.
-When blocked, Claude is told to ask the user for the value directly or read a `.env.example`
-template instead.
+Only the bare `.env` basename is blocked. Every `.env.<suffix>` variant — `.env.local`,
+`.env.production`, `.env.test`, `.env.example`, and so on — is allowed through, since those are
+commonly committed templates or environment-specific configs. When blocked, Claude is told to ask
+the user for the value directly or read a `.env.<suffix>` variant instead.
 
 > The hook runs `${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py`, probing `python3`, then
 > `python`, then the `py` launcher. A Python 3 interpreter under any of those names must be
 > on your PATH (on Windows the official installer provides `python`/`py`).
+
+### Hook: redact-env-secrets
+
+A `PostToolUse` hook on `Read|Edit|MultiEdit|NotebookEdit|Grep|Bash` that complements
+`block-env-read`. The bare `.env` is hard-blocked; the `.env.<suffix>` variants are readable — so
+this hook redacts secret **values** out of those variants before the model sees them, replacing the
+tool's output via `updatedToolOutput`:
+
+- `Read` of a `.env.<suffix>` file — re-reads the file and replaces secret values with `[REDACTED]`
+- `Grep` whose `path`/`glob` targets a `.env.<suffix>` file — redacts the matched lines
+- `Bash` whose command references a `.env.<suffix>` file (`cat`, `grep`, `source`, …) — redacts stdout
+
+Redaction is **name-based**: the value is masked when the variable name contains one of
+`PASSWORD`, `PASSWD`, `PASSPHRASE`, `PWD`, `SECRET`, `TOKEN`, `APIKEY`, `KEY`, `CREDENTIAL`,
+`PRIVATE`, `SIGNATURE`, `SIGNING`, `SALT` (case-insensitive). So `API_KEY=...`, `DB_PASSWORD=...`
+and `export SECRET_TOKEN=...` are masked, while `DB_HOST`, `LOG_LEVEL`, `AUTH_ENABLED=true` pass
+through. When nothing is actually redacted, the original output is left untouched.
+
+A short `SAFE_NAMES` allowlist is checked **first** to suppress the obvious false positives — names
+that contain a keyword but aren't secret because they're publishable, an identifier/location, or a
+reference to a secret store: `PUBLIC_KEY`, `KEY_ID`, `KEY_PATH`, `KEYFILE`, `KEY_FILE`, `KEY_NAME`,
+`SECRET_NAME`, `SECRET_ARN`, `TOKEN_URL`, `TOKEN_ENDPOINT`, `TOKEN_EXPIRY`, `TOKEN_TTL`. These match
+as the whole name or a trailing `_`-segment, so `AWS_PUBLIC_KEY` and `API_KEY_ID` pass through while
+`AWS_SECRET_ACCESS_KEY` is still redacted.
+
+> This is a **best-effort safety net, not a guarantee.** It trusts the variable name to advertise
+> that its value is sensitive, so it cannot catch a secret stored under an innocuous name, and it
+> deliberately over-redacts (e.g. `PUBLIC_KEY`) rather than risk a leak. Keep real secrets out of
+> files the model reads. Edit the keyword list in `redact-env-secrets.py` to tune it.
+
+> Same interpreter probing as the other hooks (`python3` → `python` → `py`).
 
 ## Install
 
