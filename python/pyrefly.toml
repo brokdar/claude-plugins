@@ -1,0 +1,42 @@
+# Strict fallback config for pyrefly — used ONLY when the project has no pyrefly config.
+# Enforces maximum annotation coverage and flags implicit/explicit Any usage.
+# Missing/unresolved imports are suppressed so ephemeral uvx runs stay clean.
+#
+# Verified against https://pyrefly.org/en/docs/configuration/ and
+# https://pyrefly.org/en/docs/error-kinds/.
+
+# Built-in strict preset as the base. It enables: implicit-any,
+# missing-override-decorator, potential-bad-keyword-argument, unused-ignore,
+# and sets strict-callable-subtyping = true.
+preset = "strict"
+
+# Suppress unresolved-import errors for ALL modules — essential for ephemeral uvx
+# runs that can't see the project's installed deps. A module is replaced with Any
+# only when it can't be found, so imports that ARE resolvable still type-check.
+ignore-missing-imports = ["*"]
+
+[errors]
+# --- Annotation coverage (default: ignore -> enable at ERROR) ---
+unannotated-return = true
+implicit-any-parameter = true
+implicit-any-type-argument = true
+implicit-any-attribute = true
+implicit-any-empty-container = true
+
+# --- Explicit Any usage ---
+explicit-any = true
+
+# --- Ignore-comment hygiene ---
+unused-ignore = true
+unused-type-ignore = true
+
+# --- Casts ---
+# The [errors] table is boolean on/off only — `true` keeps redundant-cast at its
+# default `warn` severity (it does NOT upgrade to error; use --error for that).
+redundant-cast = true
+
+# --- Override discipline ---
+missing-override-decorator = true
+
+# --- Import hygiene (warn) ---
+untyped-import = true

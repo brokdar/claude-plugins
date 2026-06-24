@@ -4,13 +4,13 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-destructive-git.py" }
+          { "type": "command", "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/block-destructive-git.py\"; done; echo 'base plugin: no python interpreter (python3/python/py) on PATH; destructive-git guard inactive' >&2" }
         ]
       },
       {
         "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Bash",
         "hooks": [
-          { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py" }
+          { "type": "command", "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py\"; done; echo 'base plugin: no python interpreter (python3/python/py) on PATH; env-read guard inactive' >&2" }
         ]
       }
     ]

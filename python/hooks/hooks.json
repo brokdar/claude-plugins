@@ -1,0 +1,26 @@
+{
+  "description": "Python lint/type/test gates on stop (changed files, stack-neutral auto-detect)",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/format-on-stop.py\"; done; echo 'python plugin: no python interpreter (python3/python/py) on PATH; skipping format gate' >&2",
+            "statusMessage": "ruff: autofix + format changed files…"
+          },
+          {
+            "type": "command",
+            "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/typecheck-on-stop.py\"; done; echo 'python plugin: no python interpreter (python3/python/py) on PATH; skipping type gate' >&2",
+            "statusMessage": "type-checking changed files…"
+          },
+          {
+            "type": "command",
+            "command": "for _py in python3 python py; do command -v \"$_py\" >/dev/null 2>&1 && exec \"$_py\" \"${CLAUDE_PLUGIN_ROOT}/hooks/test-on-stop.py\"; done; echo 'python plugin: no python interpreter (python3/python/py) on PATH; skipping test gate' >&2",
+            "statusMessage": "running tests for changed files…"
+          }
+        ]
+      }
+    ]
+  }
+}

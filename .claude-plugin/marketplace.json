@@ -1,5 +1,5 @@
 {
-  "name": "claude-plugins",
+  "name": "dev-workflow-plugins",
   "owner": {
     "name": "Jürgen Altszeimer",
     "email": "brokdar89@gmail.com"
@@ -13,6 +13,11 @@
       "name": "base",
       "source": "./base",
       "description": "Opinionated general dev workflow baseline: feature speccing, bug reporting, team-based feature planning, a QA verification gate, issue-closing PR shipping, and a destructive-git + secrets-read safety net."
+    },
+    {
+      "name": "python",
+      "source": "./python",
+      "description": "Stack-neutral Python standards: path-scoped coding & testing judgment skills, plus changed-file lint/type/test gates on stop that run your repo's own ruff / pyrefly|mypy / pytest."
     }
   ]
 }

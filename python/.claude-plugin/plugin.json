@@ -1,0 +1,11 @@
+{
+  "name": "python",
+  "description": "Stack-neutral Python standards: path-scoped coding & testing judgment skills, plus changed-file lint/type/test gates on stop. Pairs with whatever ruff / pyrefly|mypy / pytest your repo already uses.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jürgen Altszeimer",
+    "email": "brokdar89@gmail.com"
+  },
+  "license": "MIT",
+  "keywords": ["python", "pytest", "ruff", "type-checking", "testing", "standards", "hooks"]
+}

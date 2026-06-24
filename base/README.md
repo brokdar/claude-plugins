@@ -149,8 +149,9 @@ A `PreToolUse` hook on `Bash` that blocks destructive git operations before they
 
 When blocked, Claude is told to use the safe alternative or ask you to confirm.
 
-> The hook runs `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-destructive-git.py`. Python 3 must be
-> available on your PATH.
+> The hook runs `${CLAUDE_PLUGIN_ROOT}/hooks/block-destructive-git.py`, probing `python3`,
+> then `python`, then the `py` launcher. A Python 3 interpreter under any of those names
+> must be on your PATH (on Windows the official installer provides `python`/`py`).
 
 ### Hook: block-env-read
 
@@ -167,14 +168,15 @@ Template files (`.env.example`, `.env.sample`, `.env.template`, `.env.dist`) are
 When blocked, Claude is told to ask the user for the value directly or read a `.env.example`
 template instead.
 
-> The hook runs `python3 ${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py`. Python 3 must be available
-> on your PATH.
+> The hook runs `${CLAUDE_PLUGIN_ROOT}/hooks/block-env-read.py`, probing `python3`, then
+> `python`, then the `py` launcher. A Python 3 interpreter under any of those names must be
+> on your PATH (on Windows the official installer provides `python`/`py`).
 
 ## Install
 
 ```text
 /plugin marketplace add brokdar/claude-plugins
-/plugin install base@claude-plugins
+/plugin install base@dev-workflow-plugins
 ```
 
 Replace `brokdar/claude-plugins` with the actual GitHub `owner/repo` if it differs.

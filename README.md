@@ -1,4 +1,4 @@
-# claude-plugins
+# dev-workflow-plugins
 
 A [Claude Code](https://docs.claude.com/en/docs/claude-code) **plugin marketplace** — one
 repository hosting many plugins (skills, agents, hooks, and MCP servers) for everyday
@@ -9,8 +9,9 @@ development workflows.
 | Plugin | What it gives you |
 |---|---|
 | [`base`](./base) | The opinionated dev-workflow baseline for every repo: feature speccing, bug reporting, team-based feature planning, a QA verification gate, issue-closing PR shipping, and a destructive-git + secrets-read safety net. |
+| [`python`](./python) | Stack-neutral Python standards: path-scoped coding & testing judgment skills, plus changed-file lint/type/test gates on stop that run your repo's own ruff / pyrefly\|mypy / pytest. |
 
-More plugins (e.g. stack-specific `python` / `nextjs` layers) are planned and will be added under
+More plugins (e.g. stack-specific `nextjs` layers) are planned and will be added under
 their own subdirectories.
 
 ## Installing from this marketplace
@@ -20,7 +21,7 @@ Code session:
 
 ```text
 /plugin marketplace add brokdar/claude-plugins
-/plugin install <plugin-name>@claude-plugins
+/plugin install <plugin-name>@dev-workflow-plugins
 ```
 
 Replace `brokdar/claude-plugins` with the actual GitHub `owner/repo` if it differs.

@@ -1,0 +1,24 @@
+# Strict fallback config for ty — used ONLY when the project defines no ty config.
+# Enforces the strictest sensible ruleset while tolerating missing/unresolved imports
+# so it can run ephemerally via uvx without the project's virtualenv.
+#
+# Verified against https://docs.astral.sh/ty/configuration/. ty is early/preview —
+# treat this as a starting point and tune if a rule proves noisy in your code.
+
+[rules]
+# Promote every rule to error, then keep only the promotions that actually change
+# behavior (rules already at error by default are covered by `all`).
+all = "error"
+
+# --- Suppression-directive hygiene (default: warn -> error) ---
+unused-ignore-comment = "error"
+unused-type-ignore-comment = "error"
+ignore-comment-unknown-rule = "error"
+
+# --- Arithmetic safety (default: ignore -> error) ---
+division-by-zero = "error"
+
+[analysis]
+# Tolerate unresolved/missing imports so ephemeral uvx runs (no project deps) don't
+# drown in import errors. Narrow or remove when running with the project venv available.
+allowed-unresolved-imports = ["**"]
