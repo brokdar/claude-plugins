@@ -29,8 +29,10 @@ Workflows can't be auto-registered by a plugin, so this skill launches it explic
      `onlyPhase: K`, `fromPhase: N`, `toPhase: M` (combine `fromPhase`/`toPhase` for a range).
      Default (no window) is every not-yet-committed phase.
    - `verifyOnly: true` (optional) — implement nothing; run only the whole-feature verification
-     against the plan's acceptance criteria. Requires every phase to already be committed. Use it
-     to restore the final safety net after phases were finished manually (see "After it returns").
+     against the plan's acceptance criteria. Requires every phase to already be committed — if any
+     phase isn't, the run returns `note: "verify-only-blocked"` with the pending phase numbers
+     instead of verifying. Use it to restore the final safety net after phases were finished
+     manually (see "After it returns").
 3. **Sanity-check git state.** The workflow snapshots pre-existing dirty files and keeps them out of
    every phase commit, and it derives "already done" from `git log` (not the plan's status markers),
    so re-running is safe. Still, tell the user which phases will run before you launch — it's a
@@ -62,10 +64,15 @@ Report the outcome from the workflow's result:
   verification verdict if one was produced.
 - **Hard-stopped** (`stoppedAt`): surface the phase and the reason — `"qa"` (failed QA after the
   fix loop: relay the `qa-engineer`'s gaps and what needs a human decision), `"implement-failed"`
-  (the developer agent died twice, usually transient API trouble — re-launching the workflow is
-  safe and resumes at that phase), or `"commit-failed"` (the phase is QA-approved but uncommitted —
-  the tree needs a human look before anything else runs). Do **not** silently retry the whole run
-  on a `"qa"` stop.
+  (the developer agent died twice, usually transient API trouble — re-launching resumes at that
+  phase, but see the tree-hygiene rule below first), or `"commit-failed"` (the phase is QA-approved
+  but uncommitted — the tree needs a human look before anything else runs). Do **not** silently
+  retry the whole run on a `"qa"` stop.
+
+  **Tree hygiene before any re-launch:** check `git status` first. A relaunch snapshots every
+  currently-dirty file as *pre-existing* and excludes it from all phase commits — so a dead
+  attempt's partial, uncommitted work must be reverted/stashed (or the phase finished by hand)
+  before re-launching, or the redone phase will silently commit without those files.
 - **Nothing to do / scoped**: say which phases were already committed or skipped.
 
 **If the run was recovered manually** (a hard-stop or crash made you — or the user — finish the

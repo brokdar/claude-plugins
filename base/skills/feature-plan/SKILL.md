@@ -36,7 +36,10 @@ description. If nothing was given, ask the user for it before proceeding.
 - **Solo mode is a first-class variant, not a failure.** If the user asks you to plan without a
   team, run as the chair yourself: lightweight scouts for exploration, and the QA and test
   perspectives kept as real reviewer agents — those two guarantees never drop. Everything else
-  (gates discovery, phase drafting, sign-off, plan format) is unchanged.
+  (gates discovery, phase drafting, sign-off, plan format) is unchanged. (Only if the user
+  explicitly wants **no sub-agents at all** do you go further: use the self-play fallback from
+  step 3 and take the QA and test perspectives yourself as separate challenge passes — never
+  quietly spawn agents someone asked you not to.)
 - **Match the model to the seat.** Exploration scouts do mechanical reading — run them on a
   cheaper/faster model. Judgment-heavy seats (qa-engineer, test-strategist, architects on a risky
   feature) deserve a stronger one. Don't let every seat silently inherit the most expensive model.

@@ -41,6 +41,8 @@ Do this **before** the first question reaches the user:
 
 **Hold all questions until recon is back.** Never send a question batch while an exploration agent is still running — its findings will change what you need to ask.
 
+Scale recon to what exists: in a greenfield repo or an untouched area, recon is a quick confirmation that nothing relevant exists yet, not a blocker — don't manufacture exploration to satisfy the step.
+
 ## Step 2 — The Gap Checklist
 
 Planning is closing gaps, not executing a fixed script. After recon, classify each item below as **settled** (by `$ARGUMENTS`, prior conversation, or recon) or **open**. Ask only about open items, batched into as few rounds as possible — ideally one or two.
