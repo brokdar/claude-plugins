@@ -13,22 +13,78 @@ export const meta = {
 
 // ── Inputs ──────────────────────────────────────────────────────────────────
 // `args` is delivered verbatim as a JSON value by the Workflow runtime, but we
-// stay tolerant of a JSON *string* too (older runtimes / hand-launches), so a
-// dropped/mis-typed `args` can never silently default to "every pending phase".
+// stay tolerant of a JSON *string* too (older runtimes / hand-launches, or a
+// slash-command wrapper that echoes the user's raw command text). A bare string
+// is the COMMON case here, not an edge case: the command's own argument-hint
+// invites free text like "phase 2" or "phases 2-4", and a calling agent under
+// time pressure will often pass the user's words straight through instead of
+// building a proper object.
+//
+// (Observed failure this guards against: args was passed as the string
+// "@plan.md - focus on Phase 1". The old fallback took the ENTIRE string,
+// including "- focus on Phase 1", as the plan PATH, and — because the window
+// only ever came from structured onlyPhase/fromPhase/toPhase fields, which a
+// bare string can never carry — silently left FROM/TO at their unbounded
+// defaults. No error, no warning: the run just quietly implemented every
+// pending phase instead of the one phase that was asked for. Wrong-direction
+// silent failures like this are the worst kind, since nothing about the launch
+// looks broken until much more has been built than intended.)
+//
+// So a bare string is parsed for its plan/spec path(s) AND for common
+// phase-scoping phrases, instead of being swallowed whole as a path. Only when
+// nothing plan-shaped (no ".md" reference) is found does it fall back to
+// treating the trimmed string as the path verbatim, same as before.
+function parseFreeformArgs(str) {
+  const out = {};
+  const mdPaths = [...str.matchAll(/@?([./\w-]+\.md)\b/g)].map((m) => m[1]);
+  if (mdPaths.length >= 1) out.plan = mdPaths[0];
+  if (mdPaths.length >= 2) out.spec = mdPaths[1]; // 2nd .md mention, if any, is the spec
+
+  const range = str.match(/\bphases?\s+(\d+)\s*(?:-|–|to|through)\s*(\d+)\b/i);
+  const only = str.match(
+    /\b(?:only|just)\s+phase\s+(\d+)\b|\bphase\s+(\d+)\s+only\b|\b(?:focus(?:ing)?\s+on|do)\s+phase\s+(\d+)\b/i,
+  );
+  const from = str.match(/\bfrom\s+phase\s+(\d+)\b/i);
+  const to = str.match(/\b(?:to|through|up to)\s+phase\s+(\d+)\b/i);
+  // A single unqualified "phase N" mention (no range/only/from keyword) in a
+  // short scoping instruction reads as "just that phase" — the same reading a
+  // human collaborator would give it ("do phase 3" vs. the already-handled
+  // "from phase 3" / "phases 3-5").
+  const bareSingle = str.match(/\bphase\s+(\d+)\b/i);
+
+  if (range) {
+    out.fromPhase = Number(range[1]);
+    out.toPhase = Number(range[2]);
+  } else if (only) {
+    out.onlyPhase = Number(only[1] || only[2] || only[3]);
+  } else if (from || to) {
+    if (from) out.fromPhase = Number(from[1]);
+    if (to) out.toPhase = Number(to[1]);
+  } else if (bareSingle) {
+    out.onlyPhase = Number(bareSingle[1]);
+  }
+
+  if (/\bverify\s*-?\s*only\b/i.test(str)) out.verifyOnly = true;
+
+  // Nothing plan-shaped found at all → preserve the pre-existing fallback so
+  // an unusual-but-valid bare path (no scoping language) still works.
+  if (!out.plan) out.plan = str.trim();
+  return out;
+}
+
 const A = (() => {
   if (typeof args !== "string") return args || {};
   let parsedArgs;
   try {
     parsedArgs = JSON.parse(args);
   } catch {
-    // A bare string is taken as the plan path — the most common
-    // mis-invocation (args: "<plan.md>") should not abort the run.
-    return { plan: args.trim() };
+    return parseFreeformArgs(args);
   }
   // A JSON-quoted string ('"plan.md"') parses successfully — to a string,
-  // not an object. Treat it as the plan path too.
+  // not an object. Run it through the same freeform parser (it may still
+  // carry scoping language, e.g. '"plan.md phase 2"').
   return typeof parsedArgs === "string"
-    ? { plan: parsedArgs.trim() }
+    ? parseFreeformArgs(parsedArgs)
     : parsedArgs || {};
 })();
 

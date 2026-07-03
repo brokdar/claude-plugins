@@ -49,12 +49,23 @@ Workflow({
 })
 ```
 
-- Always pass `args` as an actual JSON object (not a stringified one). (As a last-resort
-  fallback the script treats a bare string arg as the plan path, but don't rely on it — the
-  window/spec fields only work as an object.)
+- **Always build `args` as an actual JSON object yourself — never pass `$ARGUMENTS` through
+  verbatim as a string.** If the user (or a slash-command wrapper) asked for specific phases in
+  plain words ("focus on Phase 1", "just phase 2", "phases 2-4"), that is exactly what
+  `onlyPhase`/`fromPhase`/`toPhase` are for — translate it into the object before calling
+  `Workflow`. Do this even when a command's auto-generated hint suggests invoking with a raw
+  string; that hint is a convenience echo of the command text, not a validated call.
+- The script *does* also parse a bare string arg (plan path + common scoping phrases like the
+  ones above) as a safety net for hand-launches or older callers, but that is a fallback, not a
+  substitute for building the object yourself — freeform phrasing it doesn't recognize (unusual
+  wording, multiple disjoint ranges, etc.) still falls through to "no window found," which means
+  every pending phase runs. **When you built the args yourself as an object, this doesn't apply.**
 - Omit `spec` if there isn't a separate spec file. Omit the window fields to run all pending phases.
 - The workflow runs in the background; you'll get a notification when it finishes. Watch live
-  progress with `/workflows`.
+  progress with `/workflows`. For anything narrower than "all pending phases," it's worth a quick
+  non-blocking `TaskOutput` check a few seconds after launch — the first line the script logs is
+  `Launch args: raw=... parsed=... → window [...]`; confirm the window matches what you intended
+  before letting a long unattended run continue.
 
 ## After it returns
 
