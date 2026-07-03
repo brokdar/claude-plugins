@@ -21,7 +21,9 @@ const A =
         try {
           return JSON.parse(args);
         } catch {
-          return {};
+          // A bare string is taken as the plan path — the most common
+          // mis-invocation (args: "<plan.md>") should not abort the run.
+          return { plan: args.trim() };
         }
       })()
     : args || {};
@@ -43,6 +45,14 @@ const FROM =
   ONLY != null ? ONLY : A.fromPhase != null ? Number(A.fromPhase) : -Infinity;
 const TO =
   ONLY != null ? ONLY : A.toPhase != null ? Number(A.toPhase) : Infinity;
+
+// { verifyOnly: true } → implement nothing; run ONLY the whole-feature
+// verification (requires every phase already committed). This exists so the
+// final safety net is still reachable when a run was hard-stopped and the
+// remaining phases were finished by hand — the cross-phase issues it catches
+// (double work between phases, one surface breaking another) are exactly what
+// per-phase QA can't see.
+const VERIFY_ONLY = A.verifyOnly === true;
 
 const MAX_FIX_LOOPS = 2; // QA reject → fix → re-QA, this many times, then hard-stop.
 
@@ -269,15 +279,30 @@ function buildStepsLine(p) {
     : "";
 }
 
-function implementPrompt(p, fixIssues, handoff) {
+// Orientation block from the PREVIOUS phase's handoff — a new phase's implement
+// agent is a fresh context, but the feature's earlier phases already mapped the
+// terrain; passing the map forward cuts minutes of re-exploration per phase.
+function priorPhaseBlock(h) {
+  if (!h) return "";
+  const files = (h.fileMap || []).map((f) => `  - ${f}`).join("\n");
+  return `
+CONTEXT from the PREVIOUS phase's implementation — orientation only, this phase builds on it (verify anything load-bearing, but don't re-discover the layout from scratch):
+Summary: ${h.summary}
+Files it touched:
+${files || "  (none listed)"}
+`;
+}
+
+function implementPrompt(p, fixIssues, handoff, prior) {
   if (fixIssues && fixIssues.length) {
-    return `The Phase ${p.n} ("${p.title}") quality gate flagged these items — fix ONLY them, then confirm the phase is green by running the targeted tests for these items${p.hasHigherLevelTests ? " plus this phase's higher-level (integration/E2E) tests" : ""} (the full fast suites are re-run at commit time, so you needn't repeat those here):
+    return `The Phase ${p.n} ("${p.title}") quality gate flagged these items — fix ONLY them, confirm with the targeted tests for these items${p.hasHigherLevelTests ? " plus this phase's higher-level (integration/E2E) tests" : ""}, then re-run this phase's gates so the phase ends GREEN (your fix may have side effects beyond the flagged items, and nothing downstream re-runs the suites for you):
 ${fixIssues.map((i) => `- ${i.requirement} (${i.area})`).join("\n")}
 ${handoffBlock(handoff)}${GUARDRAILS}${HANDOFF_INSTRUCTION}`;
   }
   return `Implement Phase ${p.n} ("${p.title}") of ${PLAN} END TO END, by yourself, using TDD.
 
 What this phase delivers: ${p.summary}
+${priorPhaseBlock(prior)}
 
 Do the complete phase: write the failing tests first (confirm RED), implement to GREEN, then ${gatesLine(p)}${p.hasHigherLevelTests ? " Also write and run this phase's higher-level (integration/end-to-end) tests — confirm them failing for the right reason, then passing." : ""}${buildStepsLine(p)} Follow any phase-specific ordering ("phase shape" / internal TDD order) the plan specifies, step by step.
 ${GUARDRAILS}${HANDOFF_INSTRUCTION}`;
@@ -293,10 +318,18 @@ function qaPrompt(p, rejectedIssues, handoff) {
     return `Re-validate Phase ${p.n} ("${p.title}") after a fix — TARGETED. Validate ONLY the previously-rejected requirements below; do not re-validate the whole phase:
 ${rejectedIssues.map((i) => `- ${i.requirement} (${i.area})`).join("\n")}
 ${pointers}${handoffBlock(handoff)}
-For each one, confirm it is now genuinely fulfilled, citing the test that exercises it. Run ONLY the targeted tests for these requirements (the specific test file or a filter) — do NOT re-run the full integration/E2E suites; regressions are already covered by the fix agent's run and the commit gates. Return the verdict in the provided structured format.`;
+For each one, confirm it is now genuinely fulfilled, citing the test that exercises it. Run ONLY the targeted tests for these requirements (the specific test file or a filter) — do NOT re-run the full integration/E2E suites; the fix agent already re-ran this phase's gates after fixing. Return the verdict in the provided structured format.`;
   }
   return `Validate Phase ${p.n} ("${p.title}").
 ${pointers}${handoffBlock(handoff)}
+Execution policy — verification here is TARGETED, not a re-run of the world: the implement agent
+already ran this phase's full gates green, and the commit step's pre-commit hooks re-run them, so
+do NOT re-execute full test/lint/type suites. Read the diff and the tests, judge requirement
+coverage against the plan, and RUN only the targeted tests that prove this phase's specific
+requirements (a test file or filter at a time, in the foreground — never start a suite in the
+background and poll for it). Escalate to a fuller re-run only if you find concrete evidence the
+implementation's gate results can't be trusted (e.g. a test that can't fail, a gate that plainly
+wasn't run) — and say so in your verdict.
 Return your verdict in the provided structured format.`;
 }
 
@@ -312,7 +345,7 @@ function commitPrompt(p, baseline) {
 ${offLimits.length ? offLimits.map((f) => `  - ${f}`).join("\n") : "  (none — tree was clean at start)"}
 
 Steps:
-1. Run ${gateHint} so the tree is formatted as the gates expect. (This may touch off-limits files too — that's fine, you simply won't stage those.) If the plan lists no formatter, skip this step.
+1. Run ONLY ${gateHint} so the tree is formatted as the gates expect. (This may touch off-limits files too — that's fine, you simply won't stage those.) If the plan lists no formatter, skip this step. Do NOT re-run test suites, type checks, or integration/E2E runners here — the phase was just QA-approved and the pre-commit hook is the final safety net; re-executing multi-minute suites at commit time only burns wall-clock.
 2. Determine THIS PHASE's files: run \`git status --porcelain -uall\` and take every dirty path EXCEPT the off-limits paths above. ALSO always exclude any path under \`.claude/agent-memory/\` (at any depth, e.g. \`backend/.claude/agent-memory/...\`) — QA/dev agents write private memory there DURING this phase, so it appears dirty but is never feature code and the off-limits snapshot (taken before they ran) won't list it. Those remaining paths are the only files you may stage.
 3. Stage them explicitly by path: \`git add -- <path1> <path2> ...\`. Never a wildcard that could catch an off-limits path.
 4. Commit with EXACTLY this message: "${p.commitMessage}". NEVER use --no-verify.
@@ -349,9 +382,11 @@ if (baseline.length) {
   );
 }
 
-const pending = parsed.phases.filter(
-  (p) => p.n >= FROM && p.n <= TO && !p.alreadyCommitted,
-);
+const pending = VERIFY_ONLY
+  ? []
+  : parsed.phases.filter(
+      (p) => p.n >= FROM && p.n <= TO && !p.alreadyCommitted,
+    );
 const committedCount = parsed.phases.filter((p) => p.alreadyCommitted).length;
 const windowed = FROM !== -Infinity || TO !== Infinity;
 log(
@@ -362,7 +397,7 @@ log(
       : "") +
     `. Implementing: ${pending.map((p) => `P${p.n}`).join(", ") || "(none)"}.`,
 );
-if (pending.length === 0) {
+if (pending.length === 0 && !VERIFY_ONLY) {
   log("No phases to implement in this window — nothing to do.");
   return {
     feature: parsed.feature,
@@ -373,25 +408,43 @@ if (pending.length === 0) {
 
 // ── Drive pending phases strictly sequentially (shared files + per-phase commit) ─
 const completed = [];
+let prevHandoff = null; // previous phase's handoff → next phase's orientation
 for (const p of pending) {
   const title = `Phase ${p.n}: ${p.title}`;
   phase(title);
 
   // 1. Implement — one fresh developer agent carries the whole phase via TDD,
   //    and returns a CONTEXT HANDOFF that primes the rest of the phase's agents.
-  let handoff = await agent(implementPrompt(p, null, null), {
+  //    agent() returns null when the agent dies (transient API error) or is
+  //    skipped — NEVER advance a phase to QA without an implementation: retry
+  //    once, then hard-stop. (Observed failure: an implement agent died on a
+  //    529 mid-exploration and QA was dispatched against an empty diff.)
+  let handoff = await agent(implementPrompt(p, null, null, prevHandoff), {
     label: `P${p.n}:implement`,
     phase: title,
     model: "opus",
     schema: HANDOFF_SCHEMA,
   });
+  if (handoff == null) {
+    log(`Phase ${p.n} implement agent returned nothing (died/skipped) — retrying once.`);
+    handoff = await agent(implementPrompt(p, null, null, prevHandoff), {
+      label: `P${p.n}:implement-retry`,
+      phase: title,
+      model: "opus",
+      schema: HANDOFF_SCHEMA,
+    });
+  }
+  if (handoff == null) {
+    log(`HARD STOP at Phase ${p.n}: implement produced no result after a retry.`);
+    return { stoppedAt: p.n, reason: "implement-failed", completed };
+  }
 
   // 2. QA gate with a bounded fix loop. Fix + re-QA carry the handoff so the
   //    fresh agents skip re-exploration; the re-QA is targeted to the rejections.
   let verdict = await agent(qaPrompt(p, null, handoff), {
     label: `P${p.n}:qa`,
     phase: title,
-    agentType: "qa-engineer",
+    agentType: "base:qa-engineer",
     schema: QA_SCHEMA,
     model: "opus",
   });
@@ -412,7 +465,7 @@ for (const p of pending) {
     verdict = await agent(qaPrompt(p, rejected, handoff), {
       label: `P${p.n}:qa-recheck${loops}`,
       phase: title,
-      agentType: "qa-engineer",
+      agentType: "base:qa-engineer",
       schema: QA_SCHEMA,
       model: "opus",
     });
@@ -424,12 +477,21 @@ for (const p of pending) {
     return { stoppedAt: p.n, reason: "qa", verdict, completed };
   }
 
-  // 3. Commit the phase with its exact plan commit message.
+  // 3. Commit the phase with its exact plan commit message. Mechanical work —
+  //    a cheap model suffices; never inherit the (possibly premium) session model.
   const commit = await agent(commitPrompt(p, baseline), {
     label: `P${p.n}:commit`,
     phase: title,
+    model: "sonnet",
   });
+  if (commit == null) {
+    log(
+      `HARD STOP at Phase ${p.n}: commit agent failed — phase is QA-approved but NOT committed; a next phase would sweep its files.`,
+    );
+    return { stoppedAt: p.n, reason: "commit-failed", verdict, completed };
+  }
   completed.push({ phase: p.n, title: p.title, verdict, commit });
+  prevHandoff = handoff;
   log(`✅ Phase ${p.n} committed.`);
 }
 
@@ -442,7 +504,9 @@ const allComplete = parsed.phases.every(
 );
 if (!allComplete) {
   log(
-    "Scoped run complete — skipping whole-feature verification (phases still remain).",
+    VERIFY_ONLY
+      ? "verifyOnly requested but some phases are not committed yet — nothing to verify against; finish (or run) the remaining phases first."
+      : "Scoped run complete — skipping whole-feature verification (phases still remain).",
   );
   return { feature: parsed.feature, completed, scoped: true };
 }
@@ -453,7 +517,7 @@ const finalReport = await agent(
   {
     label: "final-ac-verification",
     phase: "Verify",
-    agentType: "qa-engineer",
+    agentType: "base:qa-engineer",
     schema: QA_SCHEMA,
     model: "opus",
   },

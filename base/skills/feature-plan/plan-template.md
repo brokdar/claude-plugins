@@ -177,6 +177,18 @@ assumed:
 
 ---
 
+## Decisions Log
+
+<!-- Every judgment call the room arbitrated — what was chosen, over what, and why — so a reader
+     can audit tradeoffs without replaying the meeting. The facilitator surfaces the 3-5
+     highest-leverage entries to the user at adjourn. -->
+
+| # | Decision | Chosen over | Why |
+| - | -------- | ----------- | --- |
+| 1 | [what was decided] | [the alternative] | [tradeoff rationale] |
+
+---
+
 ## Dependency Overview
 
 ```

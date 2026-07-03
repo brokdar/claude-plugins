@@ -33,6 +33,13 @@ description. If nothing was given, ask the user for it before proceeding.
   and several rounds of challenge. Decide how much ceremony *this* feature actually warrants — a plan
   that's exactly as detailed as it needs to be and no more. Over-planning a simple feature is as much
   a failure as under-planning a complex one.
+- **Solo mode is a first-class variant, not a failure.** If the user asks you to plan without a
+  team, run as the chair yourself: lightweight scouts for exploration, and the QA and test
+  perspectives kept as real reviewer agents — those two guarantees never drop. Everything else
+  (gates discovery, phase drafting, sign-off, plan format) is unchanged.
+- **Match the model to the seat.** Exploration scouts do mechanical reading — run them on a
+  cheaper/faster model. Judgment-heavy seats (qa-engineer, test-strategist, architects on a risky
+  feature) deserve a stronger one. Don't let every seat silently inherit the most expensive model.
 - **Stack roles are primed dynamically.** No fixed roster, no project-specific agent to depend on.
   You detect the stack and *prime a general-purpose agent* into the specialist this feature needs
   ("you are the data architect for *this* schema…"). Prefer a matching custom agent if the repo
@@ -62,9 +69,12 @@ security, performance) as warranted. For a **small, well-understood feature the 
 trio can plan it on its own; don't convene separate stack architects for a one-file or single-flag
 change. Add the stack specialists only when a layer is substantial enough to need a dedicated mind on
 it. Size the room to the feature — don't fill seats out of habit. Before the team runs, tell the user
-the roster and how heavy a plan you're aiming for; and if the feature is **materially ambiguous**
-(two reasonable readings that lead to different designs — e.g. "extend the existing mechanism" vs.
-"add a new one"), surface that to the user now rather than letting the team silently pick one.
+the roster and how heavy a plan you're aiming for — this is informational, not an approval gate;
+don't pause for it. But if the feature is **materially ambiguous** (two reasonable readings that
+lead to different designs — e.g. "extend the existing mechanism" vs. "add a new one"), that IS a
+stopping point: ask the user the question explicitly and wait for the answer rather than letting
+the team silently pick one. Judgment calls below that bar don't interrupt the meeting — they get
+arbitrated in the room and recorded in the plan's Decisions Log (step 6).
 
 **3 — Explore (round 1).** Load the messaging tool (`ToolSearch("select:SendMessage")`), then spawn
 all specialists **in one message** (parallel `Agent` calls). If you can't convene sub-agents in your
@@ -78,6 +88,18 @@ the rule that this is planning — propose, don't implement, don't commit. Ask e
 roughly: where the change lands, the committable slices they propose (and what each tests, at which
 level, and which gates/build-steps it triggers), dependencies, risks, and any questions for a named
 teammate.
+
+Two rules go into **every** specialist prompt, verbatim in spirit:
+
+- **Deliver the report before going idle.** The final message of the turn IS the report — a
+  specialist that goes idle without sending its findings just gets re-prompted, wasting the room's
+  wall-clock. (In practice this stall is the most common failure mode; the prompt rule is the fix,
+  the nudge in "If something stalls" is the fallback.)
+- **Inventory reuse before proposing anything new.** Name the existing components, helpers, and
+  patterns the change should extend, and any doc-sync obligations the repo imposes (docs that must
+  be updated when routes/models/APIs change — check the repo's CLAUDE.md/contributing docs). A
+  slice that creates a new file must say which existing code was checked and why extending it
+  doesn't work.
 
 **4 — Draft the phases.** Merge the slices into phases that each end in a clean commit, fold any
 build step into the phase whose edits trigger it, and check every acceptance criterion lands
@@ -94,7 +116,11 @@ can't, and you record the tradeoff. `qa-engineer` presses on requirement coverag
 presses on whether each phase's tests assert the real behavior and are TDD-feasible. Match the rounds
 to the real tension — a complex feature may need several exchanges, a simple one little beyond a
 sanity check; don't manufacture debate where there's no disagreement. If something hasn't converged
-in about two exchanges, you decide and note why. **The room doesn't adjourn until every specialist
+in about two exchanges, you decide and note why. A **conditional sign-off is not a sign-off yet**:
+when a discipline agent passes "conditional on M1…Mn", fold the mechanical items into the draft,
+but route each substantive condition to the specialist it implicates and get their explicit
+confirmation before treating it as resolved — that reconciliation round is exactly where plans gain
+the clauses that prevent real bugs. **The room doesn't adjourn until every specialist
 signs off; the QA and test sign-off is required.**
 
 **6 — Write the plan.** This is your own final act — don't delegate it. Read
@@ -115,11 +141,21 @@ tasks terse (a line or two each; skip the optional sub-agent prompts and long fi
 - a Higher-Level Tests step **only when** the phase has integration/E2E work (its presence is the
   signal to write & run them).
 
+Before writing, run a **reuse self-check** on the draft: for every new file or component a phase
+creates, confirm someone actually checked the existing code it could have extended (and record why
+it doesn't fit), and that repo-imposed doc-sync obligations landed in the phases that trigger them.
+Then include a short **Decisions Log** in the plan — every judgment call the room arbitrated (what
+was chosen, over what, and why) — so a reader can audit the tradeoffs without replaying the meeting.
+
 The meeting is not done until the file exists on disk.
 
 **7 — Adjourn.** Confirm the plan file was actually written (the work isn't finished until it is),
-confirm the sign-offs, release the specialists (tear down the team if you created one), output
-`Plan saved to: <path>`, and stop. Don't begin implementation.
+confirm the sign-offs, release the specialists (tear down the team if you created one), and output
+`Plan saved to: <path>` **together with the 3-5 highest-leverage entries from the Decisions Log** —
+the calls the user never explicitly made and would most want to veto (a new component vs. extending
+a shared one, a phasing choice QA pushed back on). Don't ask for approval or wait — the plan stands
+as written — but surfacing these gives the user a targeted review entry point instead of a long
+plan file to re-derive. Then stop. Don't begin implementation.
 
 ## What must hold (the rest is the team's judgment)
 
@@ -133,6 +169,9 @@ specialists to seat) is the team's call, guided by the recommended phase shape i
   fail for the right reason before the code exists, and `test-strategist` signed off.
 - **Each phase ships clean**: it commits green against the gates you discovered, with tests and the
   code they pin landing in the same phase, and any build step sequenced before what depends on it.
+- **New code is justified**: any phase that creates a new file/component names the existing code it
+  extends or why extending it doesn't work, and repo-imposed doc-sync obligations are folded into
+  the phases whose edits trigger them.
 - **The plan is in the right format**: it follows the template and is saved as `<feature-name>-plan.md`.
 - **The plan is right-sized**: as detailed as the feature warrants and no more. A few short phases
   with light per-phase detail is the *correct* outcome for a small feature, not a thoroughness gap;

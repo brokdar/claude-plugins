@@ -47,9 +47,13 @@ First make sure the label exists. `bug` ships with every GitHub repo, but `featu
 create it if it's missing (harmless if it already exists — ignore the "already exists" error):
 
 ```bash
-gh label list --limit 200 | grep -qx -e "<label>" || \
+gh label list --json name --jq '.[].name' | grep -qx "<label>" || \
   gh label create "<label>" --color BFD4F2 --description "Filed via the base spec skills"
 ```
+
+(Use `--json name --jq '.[].name'` for the existence check — the default `gh label list` output is
+tab-separated columns, so a whole-line `grep -qx` against it never matches and the create would
+run — and error — on every repeat invocation.)
 
 Then create the issue and capture the URL it prints. The **title** goes in `--title` and the
 **body** is the template as-is — don't prepend an H1 title to the body; that would duplicate the
