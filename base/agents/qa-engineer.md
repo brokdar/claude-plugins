@@ -49,7 +49,10 @@ themselves be incomplete or drift from the real intent; part of your job is to n
    they run, and read their results before issuing the verdict — never trust an upstream "the suite
    passed" claim for an ungated suite, never serialize behind a suite you could run in parallel, and
    never re-run a suite the commit/CI gate already guarantees. A failing ungated suite or a dirty
-   build blocks sign-off.
+   build blocks sign-off. **If the caller's prompt specifies a narrower execution policy** (e.g. a
+   pipeline whose implement step already ran the gates and asks for targeted test runs only), that
+   policy wins over this default — escalate beyond it only when you find concrete evidence the
+   upstream gate results can't be trusted, and say so in your verdict.
 
 ## Rules
 

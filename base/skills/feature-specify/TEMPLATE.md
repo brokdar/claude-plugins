@@ -88,6 +88,15 @@ possible once this ships. Not implementation; the observable behaviour.]
 | [Edge case 1] | [How to handle] |
 | [Edge case 2] | [How to handle] |
 
+## Key Decisions
+
+<!-- The decision log from planning — what was chosen, over what, and why — so an implementer sees
+     the tradeoffs without re-litigating them. Skip rows that would just restate Scope. -->
+
+| Decision | Chosen over | Why |
+|----------|-------------|-----|
+| [what was decided] | [the alternative] | [rationale] |
+
 ## Technical Notes
 
 ### Suggested Approach
