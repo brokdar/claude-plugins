@@ -1,7 +1,7 @@
 {
   "name": "base",
   "description": "Opinionated general dev workflow: feature speccing, bug reporting, team-based feature planning, a QA verification gate, issue-closing PR shipping, and a destructive-git + secrets-read safety net. The baseline you want in every repository.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": {
     "name": "Jürgen Altszeimer",
     "email": "brokdar89@gmail.com"

@@ -215,6 +215,8 @@ Then run BOTH of these yourself:
 
 Set \`preexistingDirtyPaths\` to the list of every dirty/untracked file path from \`git status --porcelain -uall\` (the path only, stripped of the 2-char status prefix; list individual files, not directories). These are unrelated to the work about to happen, and the orchestrator will keep them OUT of every phase commit. If the tree is clean, return an empty array.
 
+Also fill the top-level \`feature\` (the feature's name/title) and \`branch\` (the git branch this work belongs on). Take \`branch\` from the plan's setup / "Task 0: Branch Creation" step — the NEW branch name it creates, i.e. the argument right after \`-c\` in \`git switch -c <branch> [start-point]\` (or after \`-b\` in an older \`git checkout -b <branch>\`). It is the feature branch (e.g. \`feature/…\`), NOT any \`origin/…\` start-point the command may branch from. This field is load-bearing: the orchestrator checks out / creates this branch before implementing, so all work lands off the base branch. If the plan names no branch anywhere, return an empty string.
+
 Return, in the provided structured format, EVERY implementation phase in the plan, in order. For each phase:
 - n / title — from the "## Phase N: <title>" headers.
 - commitMessage — the EXACT commit subject this phase commits with, VERBATIM. Find it wherever the plan records the phase's commit: typically the phase's final commit step (a line like \`**Command**: git add ... && git commit -m "<subject>"\`), or — if the plan puts it there — the phase header's \`→ git commit -m "<subject>"\`. Capture only the message inside the quotes.
@@ -362,6 +364,36 @@ Steps:
 Report the commit SHA and the exact list of files committed, or describe the failure if the commit could not be made cleanly.`;
 }
 
+// Ensure the feature branch exists and is checked out. The plan's "Task 0 /
+// Branch Creation" setup step is intentionally NOT parsed as a phase (it has no
+// implementation commit), so nothing else creates the branch — do it here, or
+// every phase commits onto the base branch. Idempotent: no-op if already on it,
+// plain switch if it exists, create-from-fresh-upstream if it doesn't. A NEW
+// branch is cut from the remote's detected default branch (origin/HEAD), fetched
+// first so it starts from current upstream — with graceful fallback to local
+// HEAD when offline / no remote / a dirty tree would conflict with the new base.
+// Uncommitted pre-existing changes are always preserved (never stashed or
+// discarded); a failure that can't be resolved without discarding work is
+// reported, not forced.
+function branchPrompt(branch) {
+  return `Ensure the feature branch "${branch}" exists and is checked out, BEFORE any implementation begins. The plan's setup / "Task 0: Branch Creation" step creates this branch; this workflow performs that here so all phase work lands on the feature branch, never on the base branch. Use \`git switch\` (not \`git checkout\`).
+
+Steps:
+1. Run \`git rev-parse --abbrev-ref HEAD\`. If the current branch is already "${branch}", you are done — report that and stop.
+2. Run \`git rev-parse --verify --quiet refs/heads/${branch}\` to test whether the branch already exists locally:
+   - If it EXISTS, switch to it: \`git switch ${branch}\`, then go to step 4. (Do NOT fetch or re-base an existing branch — this is a re-run; just get onto it.)
+   - If it does NOT exist, create it from fresh upstream (step 3).
+3. Create "${branch}" from the remote's current default branch:
+   a. Detect the base branch: \`git symbolic-ref --quiet --short refs/remotes/origin/HEAD\` (yields e.g. "origin/main"; the base name is the part after "origin/"). If that fails because origin/HEAD isn't set, try \`git remote set-head origin --auto\` once, then re-read it.
+   b. Fetch it: \`git fetch origin <baseName>\` (best-effort).
+   c. Create and switch from the fetched base: \`git switch -c ${branch} origin/<baseName>\`.
+   d. FALLBACK — if there is no "origin" remote, if the fetch fails (e.g. offline), or if the base can't be detected, create from the current HEAD instead: \`git switch -c ${branch}\`. Say in your report that you fell back to the local HEAD and why.
+4. Pre-existing uncommitted changes are intentional and must be preserved — never stash, discard, reset, or commit them. If \`git switch -c ${branch} origin/<baseName>\` refuses because local changes would be overwritten by the base, do NOT force it: fall back to \`git switch -c ${branch}\` from the current HEAD (which cannot conflict) and note that you branched from HEAD to preserve local changes. If switching to an EXISTING branch fails for the same reason, do NOT force or discard anything — report the failure instead.
+5. Confirm with \`git rev-parse --abbrev-ref HEAD\` that HEAD is now "${branch}", and report the final result (including the base you branched from and any fallback taken).
+
+Do NOT commit anything and do NOT modify any working-tree files — this step only manipulates branches and the remote-tracking refs.`;
+}
+
 // ── Stage 0: parse the plan into phases ──────────────────────────────────────
 // Echo the received args + resolved window FIRST, so a dropped/missing `args`
 // (e.g. from launching by name instead of scriptPath) is visible immediately
@@ -412,6 +444,31 @@ if (pending.length === 0 && !VERIFY_ONLY) {
     completed: [],
     note: "no-pending-in-window",
   };
+}
+
+// ── Ensure we're on the feature branch before touching any files ─────────────
+// Only when we actually have phases to implement (never for verifyOnly, which
+// leaves `pending` empty and merely re-verifies already-committed work).
+if (pending.length > 0) {
+  if (parsed.branch) {
+    phase("Setup");
+    const branchResult = await agent(branchPrompt(parsed.branch), {
+      label: "ensure-branch",
+      phase: "Setup",
+      model: "sonnet",
+    });
+    if (branchResult == null) {
+      log(
+        `HARD STOP: could not ensure feature branch "${parsed.branch}" is checked out — refusing to implement onto the base branch. Create/checkout the branch by hand, then re-launch.`,
+      );
+      return { stoppedAt: 0, reason: "branch-setup-failed", completed: [] };
+    }
+    log(`Feature branch ensured: ${parsed.branch}.`);
+  } else {
+    log(
+      "⚠️ Plan named no feature branch — implementing on the CURRENT branch. If that is not intended, create the branch by hand and re-launch.",
+    );
+  }
 }
 
 // ── Drive pending phases strictly sequentially (shared files + per-phase commit) ─
