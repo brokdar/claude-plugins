@@ -58,7 +58,8 @@ assumed:
 ### Task 0: Branch Creation
 
 - **Status**: ⬜
-- **Command**: `git checkout -b feature/[feature-name-slug]`
+- **Command**: `git fetch origin && git switch -c feature/[feature-name-slug] origin/[default-branch]`
+  (branch fresh from current upstream; substitute the repo's default branch, e.g. `origin/main`. If offline or no remote, fall back to `git switch -c feature/[feature-name-slug]` from the current HEAD.)
 - **Verification**: branch exists and is checked out
 
 ---
